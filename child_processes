@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -eu -o pipefail
+
+# Returns a null-separated list of the executable paths of all the transitive
+# child processes of a PPID `$1`.
+function list_child_processes() {
+  local -r ppid=${1?}
+  readarray -d ' ' -t cpids < <(cat /proc/"${ppid}"/task/*/children 2>/dev/null)
+  for cpid in "${cpids[@]}"; do
+    # By the time we get here, `cpid` may have already exited, hence the `if`.
+    if readlink -z "/proc/${cpid}/exe"; then
+      list_child_processes "${cpid}"
+    fi
+  done
+}
+
+# Returns the number of the transitive child processes of a PPID `$1` whose
+# executable paths partially match the optional regex `$2`. If no regex is
+# passed, all child processes are counted.
+function count_child_processes() {
+  local -r ppid=${1?}
+  local -r regex="${2:-^.+$}" # count all by default
+  list_child_processes "${ppid}" | grep -c -E -z -Z "${regex}"
+}
